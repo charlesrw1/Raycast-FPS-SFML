@@ -16,7 +16,7 @@ inline sf::Color operator/(sf::Color col, int div)
 }
 inline float deg_to_rad(float deg)
 {
-	return deg * (3.1415 / 180);
+	return deg * (3.1415926 / 180);
 }
 inline sf::Vector2f unit_vector(float deg_angle)
 {

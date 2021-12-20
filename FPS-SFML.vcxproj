@@ -151,7 +151,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Assets.h" />
-    <ClInclude Include="Global.h" />
+    <ClInclude Include="Settings.h" />
     <ClInclude Include="Level.h" />
     <ClInclude Include="Renderer.h" />
     <ClInclude Include="Utilities.h" />

@@ -9,6 +9,11 @@
 
 struct Weapon;
 struct WeaponData;
+struct Entity
+{
+	sf::Vector2f pos;
+	float angle;
+};
 struct GameInfo
 {
 	std::vector<std::string> GameMap;
@@ -26,6 +31,10 @@ struct GameInfo
 	{
 		WL_PISTOL,
 	};
+
+	//Entity data
+	//Temporary for now
+	std::vector<Entity> entity_list;
 
 };
 extern GameInfo GInfo;

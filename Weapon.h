@@ -2,7 +2,7 @@
 #include <SFML/Graphics.hpp>
 #include "Assets.h"
 #include "Level.h"
-#include "Global.h"
+#include "Settings.h"
 
 struct WeaponData
 {
@@ -22,7 +22,7 @@ struct Weapon
 		mSprite.setTexture(texture);
 		mSprite.setOrigin({ 25,32 });
 		mSprite.setPosition({ WIDTH * SCALE * 0.5, HEIGHT * SCALE * 0.7 });
-		mSprite.setScale(SCALE * 1.5, SCALE * 1.5);
+		mSprite.setScale(GUser.winScale * 1.5, GUser.winScale * 1.5);
 		bool InFiring = false;
 		mCurrentFrame = 0;
 

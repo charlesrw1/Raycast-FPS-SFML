@@ -3,7 +3,7 @@
 #include <assert.h>
 #include "Assets.h"
 
-Renderer::Renderer(uint8_t flags)
+Renderer::Renderer()
 {
 	EntitySprite.setPosition(GInfo.player_pos);
 	EntitySprite.setRotation(GInfo.player_angle);
@@ -32,33 +32,59 @@ Renderer::Renderer(uint8_t flags)
 	temp[3].position = { 0, HEIGHT * SCALE };
 	temp[3].texCoords = { 0,HEIGHT };
 
-	mFlags = flags;
+	mMiniMap.setPrimitiveType(sf::Quads);
+	InitMapVerticies(GUser.tileWidth);
+
+	mRayHits.resize(GUser.bWidth);
 }
 Renderer::~Renderer()
 {
 	delete mBuffer;
 	delete mDepth;
 }
+void Renderer::InitMapVerticies(int tileWidth)
+{
+	mMiniMap.clear();
+	const sf::Color tile_color = sf::Color(200, 200, 200);
+	for (int y = 0; y < GInfo.GameMap.size(); y++) {
+		for (int x = 0; x < GInfo.GameMap.at(y).size(); x++) {
+			if (GetTile({ x,y }) == ' ')
+				continue;
+			sf::Vertex vert;
+			vert.position = { float(x * tileWidth), float(y * tileWidth) };
+			vert.color = tile_color;
+			mMiniMap.append(vert);
+			vert.position = { float(x * tileWidth) + tileWidth, float(y * tileWidth) };
+			vert.color = tile_color;
+			mMiniMap.append(vert);
+			vert.position = { float(x * tileWidth) + tileWidth, float(y * tileWidth) + tileWidth };
+			vert.color = tile_color;
+			mMiniMap.append(vert);
+			vert.position = { float(x * tileWidth), float(y * tileWidth) + tileWidth };
+			vert.color = tile_color;
+			mMiniMap.append(vert);
+		}
+	}
+}
 sf::Color Renderer::GetColor(int x, int y, int texture)
 {
 	return GAssets.TF2_Images.at(texture).getPixel(x, y);
 }
-void Renderer::CastRays()
+
+void Renderer::CastRays(float bufWidth, float bufHeight, float displayDist)
 {
 	sf::Vector2f pos = GInfo.player_pos;
 	sf::Vector2f dir = { unit_vector(GInfo.player_angle) };
 
 	sf::Vertex vert;
-	if (mFlags & RENDER2D) {
-		vert.position = pos * tile_width;
-		mDotArray.append(vert);
-	}
 
-	for (int x = 0; x < WIDTH; x++)
+	for (int x = 0; x < bufWidth; x++)
 	{
+		RayHit& curRay = mRayHits[x];
+		
 		//calculate ray position and directon
 		//This gives angle in radians
-		float angle = atan((x - WIDTH / 2) / DIST);
+		float angle = atan((x - bufWidth / 2) / displayDist);
 		//To degrees
 		angle = angle * 180 / 3.14159f;
 		//Relative to player
@@ -130,97 +156,54 @@ void Renderer::CastRays()
 		if (side == 0)  perp_wall_dist = side_dist.x - delta_dist.x;
 		else			perp_wall_dist = side_dist.y - delta_dist.y;
 
-		if (mFlags & RENDER2D) {
-			vert.position = (pos + ray_dir * perp_wall_dist) * tile_width;
-			mDotArray.append(vert);
-		}
+		ray_length = ray_length * cos(deg_to_rad(angle - GInfo.player_angle));
 
-		if (mFlags & RENDER3D) {
-			//store distance of each column
-			mDepth[x] = perp_wall_dist;
-			
-			//removes fish eye effect
-			ray_length = ray_length * cos(deg_to_rad(angle - GInfo.player_angle));
-
-			int lineheight = (int)(HEIGHT / ray_length);
-			int draw_start = -lineheight / 2 + HEIGHT / 2;
-			if (draw_start < 0) draw_start = 0;
-			int draw_end = lineheight / 2 + HEIGHT / 2;
-			if (draw_end >= HEIGHT) draw_end = HEIGHT;
-
-			int texture = 0;
-
-			//Texture calculations wolfenstein
-			switch (GetTile(map_tile))
-			{
-			case '#': texture = GAssets.STONE_WALL; break;
-			case '$': texture = GAssets.WOOD_WALL; break;
-			case '@': texture = GAssets.BLUE_METAL; break;
-			case '&': texture = GAssets.BLUE_WALL; break;
-			case '%': texture = GAssets.RED_BRICK; break;
-			case '!': texture = GAssets.MOSS_WALL; break;
-			}
-
-
-			float wall_x;
-			if (side == 0) wall_x = pos.y + perp_wall_dist * ray_dir.y;
-			else		   wall_x = pos.x + perp_wall_dist * ray_dir.x;
-			wall_x -= (int)wall_x;
-
-			int tex_x = int(wall_x * TEX_WIDTH);
-			if (side == 0 && ray_dir.x > 0) tex_x = TEX_WIDTH - tex_x - 1;
-			if (side == 1 && ray_dir.y < 0) tex_x = TEX_WIDTH - tex_x - 1;
-
-			float step = 64 / float(lineheight);
-			float tex_pos = (draw_start - HEIGHT / 2 + lineheight / 2) * step;
-			for (int y = draw_start; y < draw_end; y++)
-			{
-				assert(y < HEIGHT&& y >= 0);
-				int tex_y = (int)tex_pos & (63);
-				tex_pos += step;
-				sf::IntRect image_rect = GAssets.WL_WallRects.at(texture);
-
-				//Get shaded texture if on y side
-				if (side) image_rect = { image_rect.left + 64, image_rect.top, 64, 64 };
-				sf::Uint8* temp = &mBuffer[int(y * WIDTH + x) * 4];
-
-				sf::Color color = GAssets.WL_WallImage.getPixel(image_rect.left + tex_x, image_rect.top + tex_y);
-
-				temp[0] = color.r;
-				temp[1] = color.g;
-				temp[2] = color.b;
-				temp[3] = color.a;
-			}
-
-		}
+		curRay.angle = angle;
+		curRay.map_tile = map_tile;
+		curRay.perp_wall_dist = perp_wall_dist;
+		curRay.ray_dir = ray_dir;
+		curRay.ray_length = ray_length;
+		curRay.side = side;	
 	}
 }
-sf::Color Renderer::GetSkyBoxColor(int x, int y, int x_coord)
+sf::Color Renderer::GetSkyBoxColor(int x, int y)
 {
 	//2048 and 256 are just the width of the skybox image I choose, this must be changed
 	//if using a different image
-	int y_coord = y * (256 / HEIGHT);
-	y_coord = int(256 - y_coord) % 256;
+	int y_coord = y * 256 / GUser.bHeight;
+	//y_coord = int(256 - y_coord) % 256;
 
-	sf::Color color = GAssets.skybox.getPixel((x_coord + x) % 2048, y_coord);
-	return color;
+	return GAssets.skybox.getPixel((x) % 2040, y_coord);
 }
-void Renderer::FloorCasting()
+
+void Renderer::FloorCasting(float bufWidth, float bufHeight, float displayDist)
 {
+	//no floor casting, reset pixels
+	if (!GUser.drawFloor) {
+		for (int y = 0; y < bufHeight; y++) {
+			for (int x = 0; x < bufWidth; x++) {
+				sf::Uint8* temp = &mBuffer[(int(y * bufWidth) + x) * 4];
+				temp[0] = 150;
+				temp[1] = 150;
+				temp[2] = 150;
+				temp[3] = 255;
+			}
+		}
+		return;
+	}
+	
 	sf::Vector2f ray_dir0;
 	sf::Vector2f ray_dir1;
-	float pos_z = HEIGHT * 0.5f;
+	float pos_z = bufHeight * 0.5f;
 	sf::Vector2f pos = GInfo.player_pos;
 
 	//Left angle
-	float angle0 = atan((0 - WIDTH / 2) / DIST);
-	angle0 = angle0 * 180 / 3.14159f;
-	angle0 = GInfo.player_angle + angle0;
+	float angle0 = GUser.FOV / 2;
+	angle0 = GInfo.player_angle - angle0;
 	ray_dir0 = unit_vector(angle0);
 
 	//Right angle 
-	float angle1 = atan((WIDTH - WIDTH / 2) / DIST);
-	angle1 = angle1 * 180 / 3.14159f;
+	float angle1 = GUser.FOV / 2;
 	angle1 = GInfo.player_angle + angle1;
 	ray_dir1 = unit_vector(angle1);
 
@@ -229,19 +212,20 @@ void Renderer::FloorCasting()
 	sky_angle -= floor(sky_angle / 360) * 360;
 	//2048 and 256 are just the width of the skybox image I choose, this must be changed
 	//if using a different image
-	int x_coord = sky_angle * (2048.0f / 360.0f); //starting x coord in skybox
+	int x_coord = (sky_angle/360.0f) * 2040; //starting x coord in skybox
 
-	for (int y = 0; y < HEIGHT; y++)
+	for (int y = bufHeight/2 + 1; y < bufHeight; y++)
 	{
 		//Relative to horizon
-		int p = y - HEIGHT / 2;
+		int p = y - bufHeight/2;
 		float row_distance = pos_z / p;
-
-		sf::Vector2f floor_step = row_distance * (ray_dir1 - ray_dir0) / WIDTH;
+		//hack to fix scaling issue
+		row_distance *= 90.0f/GUser.FOV;
+		sf::Vector2f floor_step = row_distance * (ray_dir1 - ray_dir0) / bufWidth;
 
 		sf::Vector2f floor = pos + row_distance * ray_dir0;
 
-		for (int x = 0; x < WIDTH; x++)
+		for (int x = 0; x < bufWidth; x++)
 		{
 			sf::Vector2i cell = { (int)floor.x, (int)floor.y };
 
@@ -253,80 +237,197 @@ void Renderer::FloorCasting()
 
 			//floor
 			sf::IntRect tex = GAssets.WL_WallRects.at(GAssets.BLUE_METAL);
-			sf::Uint8* temp = &mBuffer[int(y * WIDTH + x) * 4];
+			sf::Uint8* temp = &mBuffer[int(y * bufWidth + x) * 4];
 			sf::Color color = GAssets.WL_WallImage.getPixel(tex.left + tex_coord.x, tex.top + tex_coord.y);
 			temp[0] = color.r;
 			temp[1] = color.g;
 			temp[2] = color.b;
 			temp[3] = color.a;
-			//Ceiling/skybox
+			//Ceiling/skybox 
+			/*
 			tex = GAssets.WL_WallRects.at(GAssets.BLUE_WALL);
-			temp = &mBuffer[int((HEIGHT - 1 - y) * WIDTH + x) * 4];
+			temp = &mBuffer[int((bufHeight - 1 - y) * bufWidth + x) * 4];
 			color = GAssets.WL_WallImage.getPixel(tex.left + tex_coord.x, tex.top + tex_coord.y);
 			color = GetSkyBoxColor(x, y, x_coord);
 			temp[0] = color.r;
 			temp[1] = color.g;
 			temp[2] = color.b;
 			temp[3] = color.a;
+			*/
 		}
 	}
 }
-void Renderer::Render2d()
+void Renderer::DrawSkybox()
 {
-	const sf::Color tile_color = sf::Color(200, 200, 200);
-	sf::VertexArray verticies;
-	verticies.setPrimitiveType(sf::Quads);
-	for (int y = 0; y < GInfo.GameMap.size(); y++) {
-		for (int x = 0; x < GInfo.GameMap.at(y).size(); x++) {
-			if (GetTile({ x,y }) == ' ')
-				continue;
-			sf::Vertex vert;
-			vert.position = { float(x * tile_width), float(y * tile_width) };
-			vert.color = tile_color;
-			verticies.append(vert);
-			vert.position = { float(x * tile_width) + tile_width, float(y * tile_width) };
-			vert.color = tile_color;
-			verticies.append(vert);
-			vert.position = { float(x * tile_width) + tile_width, float(y * tile_width) + tile_width };
-			vert.color = tile_color;
-			verticies.append(vert);
-			vert.position = { float(x * tile_width), float(y * tile_width) + tile_width };
-			vert.color = tile_color;
-			verticies.append(vert);
+	float angle0 = GInfo.player_angle;
+	int bufHeight = GUser.bHeight;
+	int bufWidth = GUser.bWidth;
+	angle0 -= floor(angle0 / 360) * 360;
+	//2048 and 256 are just the width of the skybox image I choose, this must be changed
+	//if using a different image
+	int x_coord = (angle0 / 360.0f) * 2048; //starting x coord in skybox
+
+	for (int x = 0; x < bufWidth; x++)
+	{
+		float angle = mRayHits.at(x).angle;
+		angle -= floor(angle / 360) * 360;
+		int xpos = (angle / 360.0f) * 2048.0f;
+		for (int y = 0; y < bufHeight / 2; y++) 
+		{
+			sf::Color color = GetSkyBoxColor(xpos, y);
+			sf::Uint8* temp = &mBuffer[int(y * bufWidth + x) * 4];
+			temp[0] = color.r;
+			temp[1] = color.g;
+			temp[2] = color.b;
+			temp[3] = color.a;
+		}
+	}
+}
+void Renderer::DrawWalls(float bufWidth, float bufHeight, float displayDist, int tileWidth, int textureSize)
+{
+	sf::Vector2f pos = GInfo.player_pos;
+	for (int x = 0; x < GUser.bWidth; x++)
+	{
+		const RayHit& ray = mRayHits.at(x);
+
+		mDepth[x] = ray.perp_wall_dist;
+
+		//removes fish eye effect
+
+		int lineheight = round(displayDist / ray.ray_length);
+		int draw_start = -lineheight / 2 + bufHeight / 2;
+		if (draw_start < 0) draw_start = 0;
+		int draw_end = lineheight / 2 + bufHeight / 2;
+		if (draw_end >= bufHeight) draw_end = bufHeight;
+
+		int texture = 0;
+
+		//Texture calculations wolfenstein
+		switch (GetTile(ray.map_tile))
+		{
+		case '#': texture = GAssets.STONE_WALL; break;
+		case '$': texture = GAssets.WOOD_WALL; break;
+		case '@': texture = GAssets.BLUE_METAL; break;
+		case '&': texture = GAssets.BLUE_WALL; break;
+		case '%': texture = GAssets.RED_BRICK; break;
+		case '!': texture = GAssets.MOSS_WALL; break;
+		}
+
+
+		float wall_x;
+		if (ray.side == 0) wall_x = pos.y + ray.perp_wall_dist * ray.ray_dir.y;
+		else		   wall_x = pos.x + ray.perp_wall_dist * ray.ray_dir.x;
+		wall_x -= (int)wall_x;
+
+		int tex_x = int(wall_x * textureSize);
+		if (ray.side == 0 && ray.ray_dir.x > 0) tex_x = textureSize - tex_x - 1;
+		if (ray.side == 1 && ray.ray_dir.y < 0) tex_x = textureSize - tex_x - 1;
+
+		float texture_step = 64 / float(lineheight);
+		float tex_pos = (draw_start - bufHeight / 2 + lineheight / 2) * texture_step;
+		for (int y = draw_start; y < draw_end; y++)
+		{
+			assert(y < bufHeight&& y >= 0);
+			int tex_y = (int)tex_pos & (63);
+			tex_pos += texture_step;
+			sf::IntRect image_rect = GAssets.WL_WallRects.at(texture);
+
+			//Get shaded texture if on y side
+			if (ray.side) image_rect = { image_rect.left + 64, image_rect.top, 64, 64 };
+			sf::Uint8* temp = &mBuffer[int(y * bufWidth + x) * 4];
+
+			sf::Color color = GAssets.WL_WallImage.getPixel(image_rect.left + tex_x, image_rect.top + tex_y);
+
+			temp[0] = color.r;
+			temp[1] = color.g;
+			temp[2] = color.b;
+			temp[3] = color.a;
 		}
 	}
 
-	CastRays();
+}
+sf::IntRect Renderer::GetSpriteScreenPos(const Entity& sprite)
+{
+	sf::RectangleShape shape;
+	shape.setFillColor(sf::Color::Red);
 
+	sf::IntRect rect;
+	sf::Vector2f playerPos = GInfo.player_pos;
+	float playerAngle = GInfo.player_angle;
+
+	float dx = sprite.pos.x - playerPos.x;
+	float dy = sprite.pos.y - playerPos.y;
+
+	float dist = sqrt(dx * dx + dy * dy);
+
+	float spriteAngle = atan2(dy, dx)-deg_to_rad(playerAngle-90);
+	float size = GUser.displayDist / (cos(spriteAngle) * dist);
+	int x = tan(spriteAngle) * GUser.displayDist;
+	spriteAngle *= (180 / 3.14159);
+	float halved = GUser.FOV / 2;
+	//Angle is within viewcone
+	if (spriteAngle <= -180)
+		spriteAngle += 360;
+
+	printf("x: %i, Sprite angle: %f, playerangle: %f\r", x, spriteAngle, playerAngle);
+	if (spriteAngle >= -80 && spriteAngle <= 80) {
+		shape.setSize({ size,size });
+		shape.setPosition({ (GUser.bWidth/2 + x)*GUser.winScale,(GUser.bHeight / 2.0f)*GUser.winScale });
+		GInfo.window->draw(shape);
+	}
+	return rect;
+}
+void Renderer::DrawSprites()
+{
+	for (const auto& sprite : GInfo.entity_list)
+	{
+		GetSpriteScreenPos(sprite);
+	}
+}
+void Renderer::DrawMap()
+{
+	sf::Vertex vert;
+	mDotArray.clear();
+	vert.position = GInfo.player_pos * GUser.tileWidth;
+	mDotArray.append(vert);
+	
+	for (const auto& ray : mRayHits) {
+		vert.position = (GInfo.player_pos + ray.ray_dir * ray.perp_wall_dist) * GUser.tileWidth;
+		mDotArray.append(vert);
+	}
+	
 	GInfo.window->draw(mDotArray);
 	mDotArray.clear();
 
-	GInfo.window->draw(verticies);
+	GInfo.window->draw(mMiniMap);
 
-	EntitySprite.setPosition({ GInfo.player_pos.x * tile_width, GInfo.player_pos.y * tile_width });
+	EntitySprite.setPosition({ GInfo.player_pos.x * GUser.tileWidth, GInfo.player_pos.y * GUser.tileWidth });
 	EntitySprite.setRotation(GInfo.player_angle);
 	GInfo.window->draw(EntitySprite);
 
 	GInfo.window->draw(GInfo.hitscan_array);
+	sf::CircleShape circle;
+	circle.setFillColor(sf::Color::Red);
+	circle.setRadius(2);
+	for (const auto& e : GInfo.entity_list) {
+		circle.setPosition(e.pos*GUser.tileWidth);
+		GInfo.window->draw(circle);
+	}
 }
 void Renderer::Render3d()
 {
-	FloorCasting();
-	CastRays();
-	mRenderTexture.update(mBuffer, WIDTH, HEIGHT, 0, 0);
-
-	//Draws scene
+	CastRays(GUser.bWidth, GUser.bHeight, GUser.displayDist);
+	FloorCasting(GUser.bWidth, GUser.bHeight, GUser.displayDist);
+	DrawSkybox();
+	DrawWalls(GUser.bWidth, GUser.bHeight, GUser.displayDist, GUser.tileWidth, GUser.texWidth);
+	mRenderTexture.update(mBuffer, GUser.bWidth, GUser.bHeight, 0, 0);
 	GInfo.window->draw(mRenderArray, mRenderState);
-
-	//FIX ME: Draw the gun
-	//Draw gun
-	//GInfo.pWeapon->Draw();
+	DrawSprites();
 }
 void Renderer::Draw()
 {
-	//For now, just render 3d, adding in more support later
-	if (mFlags & RENDER3D)
-		Render3d();
-	else if (mFlags & RENDER2D)
-		Render2d();
+	Render3d();
+	if (GUser.drawMiniMap) {
+		DrawMap();
+	}
 }

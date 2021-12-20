@@ -10,13 +10,14 @@
 #include "Utilities.h"
 #include "Assets.h"
 #include "Level.h"
-#include "Global.h"
+#include "Settings.h"
 #include "Renderer.h"
 #include "Weapon.h"
 
+Settings GUser;
 GameInfo GInfo;
 Assets GAssets;
-Renderer GRenderer(Renderer::RENDER3D);
+Renderer GRender;
 
 void InitWeapons()
 {
@@ -37,7 +38,7 @@ void InitAssets()
 	GAssets.player2dtexture.loadFromFile("images/2d_player.png");
 
 	GAssets.WL_WallImage.loadFromFile("images/wall_textures.png");
-	GAssets.skybox.loadFromFile("images/Sky_hydro_01.jpg");
+	GAssets.skybox.loadFromFile("images/Sky_trainyard_01.jpg");
 
 	//Load wall info
 	GAssets.WL_WallRects.push_back({ 0,0,64,64 });
@@ -64,6 +65,10 @@ void InitAssets()
 	img.loadFromFile("images/weapons.png");
 	img.createMaskFromColor({ 163,73,164 });
 	GAssets.WL_WeaponTexture.loadFromImage(img);
+
+	img.loadFromFile("images/wl_guard.png");
+	img.createMaskFromColor({ 152,0,136 });
+	GAssets.WL_GuardImage = img;
 }
 void InitGame()
 {
@@ -71,18 +76,32 @@ void InitGame()
 	GInfo.player_pos = { 3, 3 };
 	GInfo.hitscan_array.setPrimitiveType(sf::Lines);
 
+	//Add entities, will add option for texture later
+	GInfo.entity_list.push_back({ {5,5},90 });
+
 	InitAssets();
 	InitWeapons();
 	GInfo.pWeapon = new Weapon(GAssets.WL_WeaponTexture, GInfo.WL_PISTOL);
+
+
+	GUser.displayDist = GetDisplayDist(GUser.FOV, GUser.bWidth);
+	GUser.winWidth = GUser.bWidth * GUser.winScale;
+	GUser.winHeight = GUser.winHeight * GUser.winScale;
+	GRender.InitMapVerticies(GUser.tileWidth);
+}
+void UpdateFOV(float new_fov) {
+	GUser.FOV = new_fov;
+	GUser.displayDist = GetDisplayDist(GUser.FOV, GUser.bWidth);
+	printf("New fov: %f\nNew dist: %f\n", GUser.FOV, GUser.displayDist);
 }
 void HandleMouseMovement(sf::Event& event)
 {
-	float x_diff = event.mouseMove.x - (WIDTH * SCALE * 0.5f) + 8;
-	float angle = sin(x_diff / DIST);
+	float x_diff = event.mouseMove.x - (GUser.winWidth * 0.5) + 8;
+	float angle = sin(x_diff / GUser.displayDist);
 	angle = angle * 180 / 3.14159f;
 	GInfo.player_angle += angle;
-	sf::Mouse::setPosition({ int(GInfo.window->getPosition().x + (WIDTH * SCALE) / 2),
-		int(GInfo.window->getPosition().y + (HEIGHT * SCALE) / 2) });
+	sf::Mouse::setPosition({ int(GInfo.window->getPosition().x + (GUser.winWidth) / 2),
+		int(GInfo.window->getPosition().y + (GUser.winWidth) / 2) });
 }
 void HandleMouseClick(sf::Event& event)
 {
@@ -95,13 +114,17 @@ void HandleEvents(sf::Event& event)
 	switch (event.type)
 	{
 	case sf::Event::KeyPressed:
-		if (event.key.code == sf::Keyboard::Space)
-			GRenderer.CycleRenderers();
+		if (event.key.code == sf::Keyboard::Space);
+
 		else if (event.key.code == sf::Keyboard::Escape)
 			GInfo.window->close();
+		else if (event.key.code == sf::Keyboard::Num1)
+			UpdateFOV(GUser.FOV - 4);
+		else if (event.key.code == sf::Keyboard::Num2)
+			UpdateFOV(GUser.FOV + 4);
 		break;
 	case sf::Event::MouseMoved: 
-		HandleMouseMovement(event); 
+		//HandleMouseMovement(event); 
 		break;
 	case sf::Event::MouseButtonPressed:
 		HandleMouseClick(event);
@@ -160,20 +183,41 @@ void PlayerMovement()
 	if (!MapCollision({ GInfo.player_pos.x, GInfo.player_pos.y + step.y }))
 		GInfo.player_pos.y += step.y;
 
+	if (GInfo.player_angle > 360.0f)
+		GInfo.player_angle -= 360;
+	else if (GInfo.player_angle < 0)
+		GInfo.player_angle += 360;
+
 }
 void GameUpdate(float ms_elapsed)
 {
 	PlayerMovement();
 	GInfo.pWeapon->Update(ms_elapsed);
 }
+void OnInterval(float ms_elasped)
+{
+	static float accumulated = 0;
+	accumulated += ms_elasped;
+	if (accumulated > 1000)
+	{
+		//Debugging----
+
+		sf::Vector2f camera;
+		sf::Vector2f dir = unit_vector(GInfo.player_angle);
+		camera = dir * 0.66;
+		camera = { camera.y*-1, camera.x*-1 };
+
+		accumulated = 0;
+	}
+}
 int main(int argc, char** argv)
 {
 	sf::RenderWindow window(sf::VideoMode(WIDTH*SCALE, HEIGHT*SCALE), "Raycast FPS");
-	window.setMouseCursorGrabbed(true);
-	window.setMouseCursorVisible(false);
-	window.setFramerateLimit(60);
+	//window.setMouseCursorGrabbed(true);
+	//window.setMouseCursorVisible(false);
+	//window.setFramerateLimit(60);
 	GInfo.window = &window;
-
+	
 	if(!LoadMap("Map-1.txt"))
 		return 1;
 	InitGame();
@@ -192,11 +236,11 @@ int main(int argc, char** argv)
 			}
 		}
 
-		FrameTimer(ms_elapsed);
+		//FrameTimer(ms_elapsed);
 		GameUpdate(ms_elapsed);
 
 		window.clear({0xf7,0x00,0xf7});
-		GRenderer.Draw();
+		GRender.Draw();
 		window.display();
 	}
 

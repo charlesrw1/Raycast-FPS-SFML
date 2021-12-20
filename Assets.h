@@ -17,11 +17,13 @@ public:
 
 	//TF2
 	std::vector<sf::Image> TF2_Images;
+	std::vector<sf::Image> Sprites;
 
 	//Wolfenstein
 	sf::Image WL_WallImage;
 	std::vector<sf::IntRect> WL_WallRects;
 	sf::Texture WL_WeaponTexture;
+	sf::Image WL_GuardImage;
 
 	//Skybox
 	sf::Image skybox;

@@ -1,42 +1,35 @@
 #pragma once
 #include "SFML/Graphics.hpp"
 #include "Level.h"
-#include "Global.h"
+#include "Settings.h"
 //Renders 3d image scene
+struct RayHit
+{
+	float angle;
+	float ray_length;
+	float perp_wall_dist;
+	bool side;
+	sf::Vector2i map_tile;
+	sf::Vector2f ray_dir;
+};
 class Renderer
 {
 public:
-	Renderer(uint8_t flags = 0);
+	Renderer();
 	~Renderer();
 	void Draw();
-	void CycleRenderers()
-	{
-		if (mFlags & RENDER2D)
-			SetFlags(RENDER3D);
-		else
-			SetFlags(RENDER2D);
-	}
-	//Rendering flags
-	enum RenderFlags
-	{
-		RENDER2D = 1,
-		RENDER3D = 2,
-		RENDERGUN = 4,
-		RENDERSKYBOX = 8,
-	};
-	void SetFlags(uint8_t flags)
-	{
-		mFlags = 0;
-		mFlags |= flags;
-	}
+	void InitMapVerticies(int tileWidth);
 private:
-	void CastRays();
-	sf::Color GetSkyBoxColor(int x, int y, int x_coord);
+	void CastRays(float bufWidth, float bufHeight, float displayDist);
+	sf::Color GetSkyBoxColor(int x, int y);
 	sf::Color GetColor(int x, int y, int texture);
-	void FloorCasting();
+	sf::IntRect GetSpriteScreenPos(const Entity& sprite);
+	void FloorCasting(float bufWidth, float bufHeight, float displayDist);
 	void DrawSprites();
-	void Render2d();
+	void DrawMap();
 	void Render3d();
+	void DrawSkybox();
+	void DrawWalls(float bufWidth, float bufHeight, float displayDist, int tileWidth, int textureSize);
 
 	//Buffer for drawing pixels
 	sf::Uint8* mBuffer;
@@ -45,6 +38,7 @@ private:
 
 	//Used for 2d viewcone
 	sf::VertexArray mDotArray;
+	sf::VertexArray mMiniMap;
 	//Used for drawing player and other entities
 	sf::Sprite EntitySprite;
 
@@ -55,6 +49,6 @@ private:
 	sf::VertexArray mRenderArray;
 	sf::RenderStates mRenderState;
 
-	//Flags for rendering
-	uint8_t mFlags;
+	std::vector<RayHit> mRayHits;
+
 };
