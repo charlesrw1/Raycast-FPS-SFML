@@ -12,27 +12,12 @@
 #include "Level.h"
 #include "Settings.h"
 #include "Renderer.h"
-#include "Weapon.h"
 
 Settings GUser;
 GameInfo GInfo;
 Assets GAssets;
 Renderer GRender;
 
-void InitWeapons()
-{
-	WeaponData temp;
-	//Pistol
-	temp.GunRects = {
-		{ 0,44,35,64 },
-		{ 35,44,49,64 },
-		{ 84,44,49,64 },
-		{ 133,44,49,64 }
-	};
-	temp.GunFrames = { 1,2,3,1 };
-	temp.OnClickCallback = &CreateHitscanRay;
-	GAssets.Weapon_Frames.push_back(temp);
-}
 void InitAssets()
 {
 	GAssets.player2dtexture.loadFromFile("images/2d_player.png");
@@ -69,6 +54,9 @@ void InitAssets()
 	img.loadFromFile("images/wl_guard.png");
 	img.createMaskFromColor({ 152,0,136 });
 	GAssets.WL_GuardImage = img;
+
+	img.loadFromFile("images/dirt_ground.jpg");
+	GAssets.ground = img;
 }
 void InitGame()
 {
@@ -79,10 +67,9 @@ void InitGame()
 	//Add entities, will add option for texture later
 	GInfo.entity_list.push_back({ {5,5},90 });
 
-	InitAssets();
-	InitWeapons();
-	GInfo.pWeapon = new Weapon(GAssets.WL_WeaponTexture, GInfo.WL_PISTOL);
+	GInfo.camera_z = 0.5;
 
+	InitAssets();
 
 	GUser.displayDist = GetDisplayDist(GUser.FOV, GUser.bWidth);
 	GUser.winWidth = GUser.bWidth * GUser.winScale;
@@ -105,8 +92,7 @@ void HandleMouseMovement(sf::Event& event)
 }
 void HandleMouseClick(sf::Event& event)
 {
-	if (GInfo.pWeapon != nullptr)
-		GInfo.pWeapon->OnClick();
+	
 }
 void HandleEvents(sf::Event& event)
 {
@@ -114,20 +100,25 @@ void HandleEvents(sf::Event& event)
 	switch (event.type)
 	{
 	case sf::Event::KeyPressed:
-		if (event.key.code == sf::Keyboard::Space);
-
-		else if (event.key.code == sf::Keyboard::Escape)
+		switch (event.key.code)
+		{
+		case sf::Keyboard::Escape:
 			GInfo.window->close();
-		else if (event.key.code == sf::Keyboard::Num1)
+			break;
+		case sf::Keyboard::Num1:
 			UpdateFOV(GUser.FOV - 4);
-		else if (event.key.code == sf::Keyboard::Num2)
+			break;
+		case sf::Keyboard::Num2:
 			UpdateFOV(GUser.FOV + 4);
+			break;
+		}
 		break;
 	case sf::Event::MouseMoved: 
-		//HandleMouseMovement(event); 
+		HandleMouseMovement(event); 
 		break;
 	case sf::Event::MouseButtonPressed:
 		HandleMouseClick(event);
+		break;
 	default: break;
 	}
 }
@@ -192,29 +183,12 @@ void PlayerMovement()
 void GameUpdate(float ms_elapsed)
 {
 	PlayerMovement();
-	GInfo.pWeapon->Update(ms_elapsed);
-}
-void OnInterval(float ms_elasped)
-{
-	static float accumulated = 0;
-	accumulated += ms_elasped;
-	if (accumulated > 1000)
-	{
-		//Debugging----
-
-		sf::Vector2f camera;
-		sf::Vector2f dir = unit_vector(GInfo.player_angle);
-		camera = dir * 0.66;
-		camera = { camera.y*-1, camera.x*-1 };
-
-		accumulated = 0;
-	}
 }
 int main(int argc, char** argv)
 {
 	sf::RenderWindow window(sf::VideoMode(WIDTH*SCALE, HEIGHT*SCALE), "Raycast FPS");
-	//window.setMouseCursorGrabbed(true);
-	//window.setMouseCursorVisible(false);
+	window.setMouseCursorGrabbed(true);
+	window.setMouseCursorVisible(false);
 	//window.setFramerateLimit(60);
 	GInfo.window = &window;
 	

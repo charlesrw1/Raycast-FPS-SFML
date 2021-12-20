@@ -7,8 +7,6 @@
 //Game map, refrence to render window
 //Player position, angle, weapon
 
-struct Weapon;
-struct WeaponData;
 struct Entity
 {
 	sf::Vector2f pos;
@@ -24,13 +22,8 @@ struct GameInfo
 	//Player data
 	sf::Vector2f player_pos;
 	float player_angle;
-	Weapon* pWeapon;
-
-	//Weapon Data
-	enum Weapons
-	{
-		WL_PISTOL,
-	};
+	
+	float camera_z;
 
 	//Entity data
 	//Temporary for now

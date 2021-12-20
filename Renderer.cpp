@@ -2,6 +2,7 @@
 #include "Utilities.h"
 #include <assert.h>
 #include "Assets.h"
+#include <cmath>
 
 Renderer::Renderer()
 {
@@ -11,11 +12,13 @@ Renderer::Renderer()
 	EntitySprite.setOrigin({ 16,16 });
 
 	mDotArray.setPrimitiveType(sf::TrianglesFan);
+	float width = GUser.bWidth, height = GUser.bHeight;
+	float scale = GUser.winScale;
 
-	mRenderTexture.create(WIDTH, HEIGHT);
+	mRenderTexture.create(width, height);
 
-	mBuffer = new sf::Uint8[WIDTH * HEIGHT * 4];
-	mDepth = new float[WIDTH];
+	mBuffer = new sf::Uint8[width * height * 4];
+	mDepth = new float[width];
 
 	mRenderState.texture = &mRenderTexture;
 
@@ -25,12 +28,12 @@ Renderer::Renderer()
 	sf::Vertex* temp = &mRenderArray[0];
 	temp[0].position = { 0,0 };
 	temp[0].texCoords = { 0,0 };
-	temp[1].position = { WIDTH * SCALE,0 };
-	temp[1].texCoords = { WIDTH,0 };
-	temp[2].position = { WIDTH * SCALE, HEIGHT * SCALE };
-	temp[2].texCoords = { WIDTH,HEIGHT };
-	temp[3].position = { 0, HEIGHT * SCALE };
-	temp[3].texCoords = { 0,HEIGHT };
+	temp[1].position = { width * scale,0 };
+	temp[1].texCoords = { width,0 };
+	temp[2].position = { width * scale, height * scale };
+	temp[2].texCoords = { width,height };
+	temp[3].position = { 0, height * scale };
+	temp[3].texCoords = { 0,height };
 
 	mMiniMap.setPrimitiveType(sf::Quads);
 	InitMapVerticies(GUser.tileWidth);
@@ -180,12 +183,13 @@ void Renderer::FloorCasting(float bufWidth, float bufHeight, float displayDist)
 {
 	//no floor casting, reset pixels
 	if (!GUser.drawFloor) {
-		for (int y = 0; y < bufHeight; y++) {
+		for (int y = bufHeight/2; y < bufHeight; y++) {
+			
 			for (int x = 0; x < bufWidth; x++) {
 				sf::Uint8* temp = &mBuffer[(int(y * bufWidth) + x) * 4];
-				temp[0] = 150;
-				temp[1] = 150;
-				temp[2] = 150;
+				temp[0] = 110;
+				temp[1] = 110;
+				temp[2] = 110;
 				temp[3] = 255;
 			}
 		}
@@ -214,7 +218,7 @@ void Renderer::FloorCasting(float bufWidth, float bufHeight, float displayDist)
 	//if using a different image
 	int x_coord = (sky_angle/360.0f) * 2040; //starting x coord in skybox
 
-	for (int y = bufHeight/2 + 1; y < bufHeight; y++)
+	for (int y = bufHeight/2; y < bufHeight; y++)
 	{
 		//Relative to horizon
 		int p = y - bufHeight/2;
@@ -238,11 +242,14 @@ void Renderer::FloorCasting(float bufWidth, float bufHeight, float displayDist)
 			//floor
 			sf::IntRect tex = GAssets.WL_WallRects.at(GAssets.BLUE_METAL);
 			sf::Uint8* temp = &mBuffer[int(y * bufWidth + x) * 4];
-			sf::Color color = GAssets.WL_WallImage.getPixel(tex.left + tex_coord.x, tex.top + tex_coord.y);
-			temp[0] = color.r;
-			temp[1] = color.g;
-			temp[2] = color.b;
+			sf::Color color= GAssets.WL_WallImage.getPixel(tex.left + tex_coord.x, tex.top + tex_coord.y);
+			color = GAssets.ground.getPixel(0 + tex_coord.x, 0 + tex_coord.y);
+			temp[0] = color.r*0.9;
+			temp[1] = color.g*0.9;
+			temp[2] = color.b*0.9;
 			temp[3] = color.a;
+			
+			
 			//Ceiling/skybox 
 			/*
 			tex = GAssets.WL_WallRects.at(GAssets.BLUE_WALL);
@@ -283,6 +290,15 @@ void Renderer::DrawSkybox()
 		}
 	}
 }
+//Temporary
+float GetIntensity(float distance)
+{
+	float intens[7] = { 1.0,0.8,0.6,0.4,0.2,0.1,0.0 };
+	int index = distance / 8.0f;
+	index = std::min(index, 6);
+	return intens[index];
+}
+
 void Renderer::DrawWalls(float bufWidth, float bufHeight, float displayDist, int tileWidth, int textureSize)
 {
 	sf::Vector2f pos = GInfo.player_pos;
@@ -325,6 +341,8 @@ void Renderer::DrawWalls(float bufWidth, float bufHeight, float displayDist, int
 
 		float texture_step = 64 / float(lineheight);
 		float tex_pos = (draw_start - bufHeight / 2 + lineheight / 2) * texture_step;
+		
+		float inten = GetIntensity(ray.perp_wall_dist);
 		for (int y = draw_start; y < draw_end; y++)
 		{
 			assert(y < bufHeight&& y >= 0);
@@ -337,21 +355,20 @@ void Renderer::DrawWalls(float bufWidth, float bufHeight, float displayDist, int
 			sf::Uint8* temp = &mBuffer[int(y * bufWidth + x) * 4];
 
 			sf::Color color = GAssets.WL_WallImage.getPixel(image_rect.left + tex_x, image_rect.top + tex_y);
-
-			temp[0] = color.r;
-			temp[1] = color.g;
-			temp[2] = color.b;
+			temp[0] = color.r * inten;
+			temp[1] = color.g * inten;
+			temp[2] = color.b * inten;
 			temp[3] = color.a;
 		}
 	}
 
 }
-sf::IntRect Renderer::GetSpriteScreenPos(const Entity& sprite)
+SpriteData Renderer::GetSpriteScreenPos(const Entity& sprite)
 {
 	sf::RectangleShape shape;
 	shape.setFillColor(sf::Color::Red);
 
-	sf::IntRect rect;
+	SpriteData sData{};
 	sf::Vector2f playerPos = GInfo.player_pos;
 	float playerAngle = GInfo.player_angle;
 
@@ -371,17 +388,27 @@ sf::IntRect Renderer::GetSpriteScreenPos(const Entity& sprite)
 
 	printf("x: %i, Sprite angle: %f, playerangle: %f\r", x, spriteAngle, playerAngle);
 	if (spriteAngle >= -80 && spriteAngle <= 80) {
+		sData.visible = true;
+		sData.distance = dist;
+		sData.x_pos = x;
+
 		shape.setSize({ size,size });
-		shape.setPosition({ (GUser.bWidth/2 + x)*GUser.winScale,(GUser.bHeight / 2.0f)*GUser.winScale });
+		shape.setPosition({ (GUser.bWidth/2 + x)*GUser.winScale,(GUser.bHeight / 2.0f)*GUser.winScale - size*0.2f });
 		GInfo.window->draw(shape);
 	}
-	return rect;
+	return sData;
 }
 void Renderer::DrawSprites()
 {
-	for (const auto& sprite : GInfo.entity_list)
-	{
-		GetSpriteScreenPos(sprite);
+	for (const auto& sprite : GInfo.entity_list) {
+		SpriteData sData = GetSpriteScreenPos(sprite);
+		if (!sData.visible)
+			continue;
+		for (int x = sData.x_pos - 32; x < sData.x_pos + 32; x++) {
+			if (x < -(GUser.bWidth / 2) || x >(GUser.bWidth / 2))
+				continue;
+			
+		}
 	}
 }
 void Renderer::DrawMap()
@@ -423,6 +450,7 @@ void Renderer::Render3d()
 	mRenderTexture.update(mBuffer, GUser.bWidth, GUser.bHeight, 0, 0);
 	GInfo.window->draw(mRenderArray, mRenderState);
 	DrawSprites();
+	//DrawUI
 }
 void Renderer::Draw()
 {

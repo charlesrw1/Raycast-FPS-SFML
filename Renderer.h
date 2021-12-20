@@ -1,8 +1,9 @@
-#pragma once
+#ifndef RENDERER_H
+#define RENDERER_H
 #include "SFML/Graphics.hpp"
 #include "Level.h"
 #include "Settings.h"
-//Renders 3d image scene
+
 struct RayHit
 {
 	float angle;
@@ -11,6 +12,13 @@ struct RayHit
 	bool side;
 	sf::Vector2i map_tile;
 	sf::Vector2f ray_dir;
+};
+struct SpriteData
+{
+	bool visible;
+	int x_pos;
+	float distance;
+	float size;
 };
 class Renderer
 {
@@ -23,7 +31,7 @@ private:
 	void CastRays(float bufWidth, float bufHeight, float displayDist);
 	sf::Color GetSkyBoxColor(int x, int y);
 	sf::Color GetColor(int x, int y, int texture);
-	sf::IntRect GetSpriteScreenPos(const Entity& sprite);
+	SpriteData GetSpriteScreenPos(const Entity& sprite);
 	void FloorCasting(float bufWidth, float bufHeight, float displayDist);
 	void DrawSprites();
 	void DrawMap();
@@ -51,4 +59,7 @@ private:
 
 	std::vector<RayHit> mRayHits;
 
+
+
 };
+#endif // !RENDERER_H

@@ -8,7 +8,6 @@
 //Images
 //Sounds
 
-struct WeaponData;
 class Assets
 {
 public:
@@ -27,8 +26,7 @@ public:
 
 	//Skybox
 	sf::Image skybox;
-
-	std::vector<WeaponData> Weapon_Frames;
+	sf::Image ground;
 
 	enum Wolfenstein
 	{
